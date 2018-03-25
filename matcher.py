@@ -15,15 +15,6 @@ import pandas as pd
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 
-# The Following lines import the databases that contains the schools names. We use pandas for convenience.
-
-dir = r"C:\Users\JuanEduardo\PycharmProjects\CodingThings" # The directory where they are located
-saber11 = pd.read_csv(dir+"\Matcher11.csv")                # The Saber 11° Database
-saber11 = saber11.values
-
-saber3 = pd.read_csv(dir+"\Matcher359.csv")                # Saber 3°, 5°, 9° Database
-saber3 = saber3.values
-
 # We defined an object called School as follows:
 class school:
     """ The school class is created for each school. Using the information contained in this class,
