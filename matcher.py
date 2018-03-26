@@ -15,6 +15,15 @@ import pandas as pd
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 
+# The Following lines import the databases that contains the schools names. We use pandas for convenience.
+
+dir = r"C:\Users\JuanEduardo\PycharmProjects\CodingThings" # The directory where they are located
+saber11 = pd.read_csv(dir+"\Matcher11.csv")                # The Saber 11° Database
+saber11 = saber11.values
+
+saber3 = pd.read_csv(dir+"\Matcher359.csv")                # Saber 3°, 5°, 9° Database
+saber3 = saber3.values
+
 # We defined an object called School as follows:
 class school:
     """ The school class is created for each school. Using the information contained in this class,
@@ -256,3 +265,61 @@ class school:
             self.with_codes = comparisons[(comparisons[:, 1] == self.mun_original) | (comparisons[:, 2] == self.dane_schoriginal)]
             self.with_na = comparisons[(comparisons[:, 1] != self.mun_original) | (comparisons[:, 2] != self.dane_schoriginal)]
             return self.with_codes, self.with_na
+
+
+def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", partial=True, freq=10000):
+    """Realizes the matcher for each school name.
+
+    This function creates a school object for each individual school available in the original database. It is mainly
+    used to find the closest match for each school in Saber11 to the schools in Saber359.
+
+    Arguments
+    -------------
+
+    original_db: It's the database that contains all the schools. This is used to create the school object.
+    comparison_db: It's the database that is going to be used for comparison. It contains the names that are going to
+                   be matched.
+
+    deb: It's a debugging parameter. It defines when to start the matcher.
+    deb2: It's a debugging parameter. It defines when to stop the matcher.
+    doc: It's the name for the final output.
+    partial: Allows for the output of partial results. (Default True)
+    freq: Defines how often the partial results are created. (Only works if partial = True)
+
+    Returns
+    ------------
+        This function returns Pandas Dataframe with all the information contained in the school object for each
+        school in original_db.
+
+        In addition, it creates an Excel Spreadsheet with it, and if partial = True, then it will also produce one
+        spreadsheet every freq iterations.
+
+    """
+
+    last = len(original_db)
+    if deb2 != 0:
+        last = deb2
+    results = np.zeros((1, 9))
+
+    for i in range(deb, last):
+        print(i)
+        if pd.isna(original_db[i][0]):
+            pass
+        else:
+            results = np.vstack([results, school(original_db[i]).matcher(comparison_db)])
+            if i == (last-1):
+                results = pd.DataFrame(results)
+                results.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
+                                   "Match School Name",    "Match Municipality",    "Match DANE",    "Match ID",
+                                   "Similarity"]
+
+                results.to_excel(doc)
+
+        if partial and i % freq == 0:
+            name = str(i)+doc
+            to_excel = pd.DataFrame(results)
+            to_excel.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
+                                "Match School Name",    "Match Municipality",    "Match DANE",    "Match ID",
+                                "Similarity"]
+            to_excel.to_excel(name)
+    return results
