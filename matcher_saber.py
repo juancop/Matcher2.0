@@ -324,13 +324,13 @@ def stata_codes(info, doc="stata_codes.xlsx"):
     info: It's a Pandas Data Frame with the output of the do_match. It could be either the Python Variable, or
     an imported Spreadsheet.
 
-    doc: The name of Excel Spreadsheet.
+    doc: The name of Do-file and the Excel Spreadsheet.
 
     Returns
     -------------
         This function returns Pandas Data Frame with all the Stata codes necessary to create a variable that can relate
         each school in the Original Database with the comparison Database.
-        In addition, it creates an Excel Spreadsheet with it.
+        In addition, it creates a Do-File and an Excel Spreadsheet with it.
 
     """
     length = info.shape[0]
@@ -338,13 +338,19 @@ def stata_codes(info, doc="stata_codes.xlsx"):
     txt = "replace newID = "
     txt2 = " if ID == "
     codes = np.array(["gen newID = ."])
+
+    do_file = open(doc[:-4]+"do", "w")
+    do_file.write(codes[0])
+
     for i in range(1, length):
         if database[i, 4] == "0" or pd.isna(database[i, 4]):
             pass
         else:
             line = txt + str(database[i, 7]) + txt2 + str(database[i, 3])
+            do_file.write("\n"+line)
             codes = np.vstack([codes, line])
 
+    do_file.close()
     codes = pd.DataFrame(codes)
     codes.to_excel(doc)
     return codes
