@@ -323,3 +323,39 @@ def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", part
                                 "Similarity"]
             to_excel.to_excel(name)
     return results
+
+
+def stata_codes(info, doc="stata_codes.xlsx"):
+    """ This function creates the code needed in Stata to impute to each school in the Original Database the ID codes
+    in the comparison database.
+
+    Arguments
+    -------------
+    info: It's a Pandas Data Frame with the output of the do_match. It could be either the Python Variable, or
+    an imported Spreadsheet.
+
+    doc: The name of Excel Spreadsheet.
+
+    Returns
+    -------------
+        This function returns Pandas Data Frame with all the Stata codes necessary to create a variable that can relate
+        each school in the Original Database with the comparison Database.
+        In addition, it creates an Excel Spreadsheet with it.
+
+    """
+    length = info.shape[0]
+    database = info.iloc
+    txt = "replace newID = "
+    txt2 = " if ID == "
+    codes = np.array(["gen newID = ."])
+    for i in range(length):
+        if database[i, 4] == "0" or pd.isna(database[i, 4]):
+            pass
+        else:
+            line = txt + str(database[i, 7]) + txt2 + str(database[i, 3])
+            codes = np.vstack([codes, line])
+
+    codes = pd.DataFrame(codes)
+    codes.to_excel(doc)
+    return codes
+
