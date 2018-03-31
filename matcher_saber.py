@@ -22,6 +22,11 @@ class school:
         by using the available geographical and institutional information combined with one string distance measure:
         the Levenshtein distance of transformations, as provided fue the FuzzyWuzzy Library.
 
+        Parameters:
+        ---------------------
+        original: Contains all the information of the school.
+        av_meet: if True, it means that meeting_time is provided (default = False).
+
         Attributes:
         ---------------------
             information: A NumPy array that contains all the school's information in the following order:
@@ -31,11 +36,17 @@ class school:
             mun_original: School's Municipality
             dane_schoriginal: School's "DANE" code
             id_original: School's ID (given by a certain Database).
+            jornada: meeting time.
 
     """
-    def __init__(self, original):
-        self.information = original.reshape(1, 4)
-        self.name_original, self.mun_original, self.dane_schoriginal, self.id_original = original
+    def __init__(self, original, av_meet=False):
+        self.av_meet = av_meet
+        if not self.av_meet:
+            self.information = original.reshape(1, 4)
+            self.name_original, self.mun_original, self.dane_schoriginal, self.id_original = original
+        else:
+            self.information = original.reshape(1, 5)
+            self.name_original, self.mun_original, self.dane_schoriginal, self.id_original, self.jornada = original
 
     def matcher(self, comparisons):
         """ Finds the best match.
@@ -81,16 +92,20 @@ class school:
         fit_av = np.array(av_ans[1]).reshape(1, 1)
         fit_na = np.array(na_ans[1]).reshape(1, 1)
 
+        self.size = (1, 4)
+        if self.av_meet:
+            self.size = (1, 5)
+
         if fit_av >= fit_na:
-            self.solution = comparisons[comparisons[:, 0] == av_ans[0]]
-            self.unique = self.multiple(self.solutionPicker(self.solution)).reshape(1, 4)
+            self.solution = av_choice[av_choice[:, 0] == av_ans[0]]
+            self.unique = self.multiple(self.solution_picker(self.solution)).reshape(self.size)
             return np.hstack([self.information, self.unique, fit_av, self.first])
         else:
-            self.solution = comparisons[comparisons[:, 0] == na_ans[0]]
-            self.unique = self.multiple(self.solutionPicker(self.solution)).reshape(1, 4)
+            self.solution = na_choice[na_choice[:, 0] == na_ans[0]]
+            self.unique = self.multiple(self.solution_picker(self.solution)).reshape(self.size)
             return np.hstack([self.information, self.unique, fit_na, self.first])
 
-    def solutionPicker(self, solution):
+    def solution_picker(self, solution):
         """ Filters out non-credible solutions.
 
             The extractOne function of the Fuzzy Wuzzy Library extracts the most similar school name to the original.
@@ -147,22 +162,22 @@ class school:
                         if prov.shape[0] > 0:
                             return prov
                         else:
-                            return np.zeros((1, 4))
+                            return np.zeros(self.size)
 
             elif self.status == "DaneNaN":
                 prov = solution[solution[:, 1] == self.mun_original]
                 if prov.shape[0] > 0:
                     return prov
                 else:
-                    return np.zeros((1, 4))
+                    return np.zeros(self.size)
             elif self.status == "MunNaN":
                 prov = solution[solution[:, 2] == self.dane_schoriginal]
                 if prov.shape[0] > 0:
                     return prov
                 else:
-                    return np.zeros((1, 4))
+                    return np.zeros(self.size)
             else:
-                return np.zeros((1, 4))
+                return np.zeros(self.size)
 
     def multiple(self, solmulti):
         """ Selects one solution.
@@ -225,9 +240,16 @@ class school:
         #   4. Complete: DANE and MUN are not NaN
 
         if pd.isna(self.mun_original) and not pd.isna(self.dane_schoriginal):
+
             self.status = "MunNan"
-            self.with_codes = comparisons[comparisons[:, 2] == self.dane_schoriginal]
-            self.with_na = comparisons[comparisons[:, 2] != self.dane_schoriginal]
+
+            if self.av_meet and not pd.isna(self.jornada):
+                condition = (comparisons[:, 2] == self.dane_schoriginal) & (comparisons[:, 4] == self.jornada)
+            else:
+                condition = comparisons[:, 2] == self.dane_schoriginal
+
+            self.with_codes = comparisons[condition]
+            self.with_na = comparisons[~condition]
 
             if len(self.with_codes) == 0 and len(self.with_na) != 0:
                 self.with_codes = self.with_na
@@ -246,18 +268,49 @@ class school:
 
         elif pd.isna(self.dane_schoriginal) and not pd.isna(self.mun_original):
             self.status = "DaneNaN"
-            self.with_codes = comparisons[comparisons[:, 1] == self.mun_original]
-            self.with_na = comparisons[comparisons[:, 1] != self.mun_original]
-            return self.with_codes, self.with_na
+
+            if self.av_meet and not pd.isna(self.jornada):
+                condition = (comparisons[:, 1] == self.mun_original) & (comparisons[:, 4] == self.jornada)
+            else:
+                condition = comparisons[:, 2] == self.mun_original
+
+            self.with_codes = comparisons[condition]
+            self.with_na = comparisons[~condition]
+
+            if len(self.with_codes) == 0 and len(self.with_na) != 0:
+                self.with_codes = self.with_na
+                return self.with_codes, self.with_na
+            elif len(self.with_na) == 0 and len(self.with_codes) != 0:
+                self.with_na = self.with_codes
+                return self.with_codes, self.with_na
+            elif len(self.with_codes) == 0 and len(self.with_na) == 0:
+                return comparisons, comparisons
+            else:
+                return self.with_codes, self.with_na
 
         else:
             self.status = "Complete"
-            self.with_codes = comparisons[(comparisons[:, 1] == self.mun_original) | (comparisons[:, 2] == self.dane_schoriginal)]
-            self.with_na = comparisons[(comparisons[:, 1] != self.mun_original) | (comparisons[:, 2] != self.dane_schoriginal)]
-            return self.with_codes, self.with_na
+
+            condition = (comparisons[:, 1] == self.mun_original) | (comparisons[:, 2] == self.dane_schoriginal)
+            if self.av_meet and not pd.isna(self.jornada):
+                condition = condition & (comparisons[:, 4] == self.jornada)
+
+            self.with_codes = comparisons[condition]
+            self.with_na = comparisons[~condition]
+
+            if len(self.with_codes) == 0 and len(self.with_na) != 0:
+                self.with_codes = self.with_na
+                return self.with_codes, self.with_na
+            elif len(self.with_na) == 0 and len(self.with_codes) != 0:
+                self.with_na = self.with_codes
+                return self.with_codes, self.with_na
+            elif len(self.with_codes) == 0 and len(self.with_na) == 0:
+                return comparisons, comparisons
+            else:
+                return self.with_codes, self.with_na
 
 
-def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", partial=True, freq=10000):
+def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", partial=True, freq=10000, av_meet=False):
     """Realizes the matcher for each school name.
 
     This function creates a school object for each individual school available in the original database. It is mainly
@@ -289,28 +342,44 @@ def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", part
     last = len(original_db)
     if deb2 != 0:
         last = deb2
-    results = np.zeros((1, 10))
+    if av_meet:
+        results = np.zeros((1, 12))
+    else:
+        results = np.zeros((1, 10))
 
     for i in range(deb, last):
         print(i)
         if pd.isna(original_db[i][0]):
             pass
         else:
-            results = np.vstack([results, school(original_db[i]).matcher(comparison_db)])
+            results = np.vstack([results, school(original_db[i], av_meet).matcher(comparison_db)])
             if i == (last-1):
                 results = pd.DataFrame(results)
-                results.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
-                                   "Match School Name",    "Match Municipality",    "Match DANE",    "Match ID",
-                                   "Similarity", "First"]
+
+                if av_meet:
+                    results.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
+                                       "Original Jornada", "Match School Name", "Match Municipality", "Match DANE",
+                                       "Match ID", "Match Jornada", "Similarity", "First"]
+
+                else:
+                    results.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
+                                       "Match School Name",    "Match Municipality",    "Match DANE",    "Match ID",
+                                       "Similarity", "First"]
 
                 results.to_excel(doc)
 
-        if partial and i % freq == 0:
+        if partial and i % freq == 0 and i > 0:
             name = str(i)+doc
             to_excel = pd.DataFrame(results)
-            to_excel.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
-                                "Match School Name",    "Match Municipality",    "Match DANE",    "Match ID",
-                                "Similarity", "First"]
+            if av_meet:
+                to_excel.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
+                                    "Original Jornada", "Match School Name", "Match Municipality", "Match DANE",
+                                    "Match ID", "Match Jornada", "Similarity", "First"]
+
+            else:
+                to_excel.columns = ["Original School Name", "Original Municipality", "Original DANE", "Original ID",
+                                    "Match School Name", "Match Municipality", "Match DANE", "Match ID",
+                                    "Similarity", "First"]
             to_excel.to_excel(name)
     return results
 
@@ -334,7 +403,7 @@ def stata_codes(info, doc="stata_codes.xlsx"):
 
     """
     length = info.shape[0]
-    database = info.iloc
+    database = info.ix
     txt = "replace newID = "
     txt2 = " if ID == "
     codes = np.array(["gen newID = ."])
@@ -343,10 +412,10 @@ def stata_codes(info, doc="stata_codes.xlsx"):
     do_file.write(codes[0])
 
     for i in range(1, length):
-        if database[i, 4] == "0" or pd.isna(database[i, 4]):
+        if database[i, "Match ID"] == 0 or pd.isna(database[i, "Match ID"]):
             pass
         else:
-            line = txt + str(database[i, 7]) + txt2 + str(database[i, 3])
+            line = txt + str(database[i, "Match ID"]) + txt2 + str(database[i, "Original ID"])
             do_file.write("\n"+line)
             codes = np.vstack([codes, line])
 
