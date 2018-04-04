@@ -16,6 +16,8 @@ from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 
 # We defined an object called School as follows:
+
+
 class school:
     """ The school class is created for each school. Using the information contained in this class,
         and provided a set for comparisons, the user is able to find the closest match (if it's reasonable)
@@ -41,6 +43,7 @@ class school:
     """
     def __init__(self, original, av_meet=False):
         self.av_meet = av_meet
+        self.first = np.array(0).reshape(1, 1)
         if not self.av_meet:
             self.information = original.reshape(1, 4)
             self.name_original, self.mun_original, self.dane_schoriginal, self.id_original = original
@@ -58,15 +61,16 @@ class school:
 
             Parameters
             ---------------------
-            comparisons: A NumPy 2D-array that contains the information of all the schools that are available for comparison.
+            comparisons: A NumPy 2D-array that contains the information of all the schools that are available for
+                         comparison.
                          Each row of the array is thought as a school. And has the same column-order as the original:
                          [Name, Municipality, School's DANE code, School's ID].
 
             Returns
             ---------------------
-                Another NumPy array that contains both the original school's information and the colest school's information,
-                and in the last position an indicator of the similarity of the schools' name based on Levenshtein's distance,
-                and the Set Ratio as a scorer.
+                Another NumPy array that contains both the original school's information and the closest school's
+                information, and in the last position an indicator of the similarity of the schools' name based on
+                Levenshtein's distance, and the Set Ratio as a scorer.
 
                 For more information about the Set Ration, consult the following url:
                 http://chairnerd.seatgeek.com/fuzzywuzzy-fuzzy-string-matching-in-python/
@@ -82,7 +86,7 @@ class school:
             av_ans = (0, 0)
             na_ans = process.extractOne(self.name_original, na_choice[:, 0], scorer=fuzz.token_set_ratio)
 
-        elif (av_choice.shape[0] == 0) & (na_choice.shape != 0):
+        elif (av_choice.shape[0] != 0) & (na_choice.shape == 0):
             av_ans = process.extractOne(self.name_original, av_choice[:, 0], scorer=fuzz.token_set_ratio)
             na_ans = (0, 0)
         else:
@@ -96,20 +100,37 @@ class school:
         if self.av_meet:
             self.size = (1, 5)
 
-        if fit_av >= fit_na:
-            self.solution = av_choice[av_choice[:, 0] == av_ans[0]]
-            self.unique = self.multiple(self.solution_picker(self.solution)).reshape(self.size)
-            return np.hstack([self.information, self.unique, fit_av, self.first])
+        # Añado que si una solución es única, tome ese elemento. 
+        solution_av = av_choice[av_choice[:, 0] == av_ans[0]]
+        solution_na = na_choice[na_choice[:, 0] == na_ans[0]]
+        
+        n_av = len(solution_av)
+        n_na = len(solution_na)
+        
+        if n_av == 1 and n_na != 1:
+            return np.hstack([self.information, solution_av, fit_av, self.first])
+        
+        elif n_na == 1 and n_av != 1:
+            return np.hstack([self.information, solution_na, fit_na, self.first])
+        
         else:
-            self.solution = na_choice[na_choice[:, 0] == na_ans[0]]
-            self.unique = self.multiple(self.solution_picker(self.solution)).reshape(self.size)
-            return np.hstack([self.information, self.unique, fit_na, self.first])
+           
+            if fit_av >= fit_na:
+    
+                unique = self.multiple(self.solution_picker(solution_av)).reshape(self.size)
+                fit_av = np.array(fuzz.token_set_ratio(self.name_original, unique)).reshape(1, 1)
+                return np.hstack([self.information, unique, fit_av, self.first])
+            else:
+                unique = self.multiple(self.solution_picker(solution_na)).reshape(self.size)
+                fit_na = np.array(fuzz.token_set_ratio(self.name_original, unique)).reshape(1, 1)
+                return np.hstack([self.information, unique, fit_na, self.first])
 
     def solution_picker(self, solution):
         """ Filters out non-credible solutions.
 
             The extractOne function of the Fuzzy Wuzzy Library extracts the most similar school name to the original.
-            In the method matcher, the algorithm searches for all the comparisons that have the same name as the closest match.
+            In the method matcher, the algorithm searches for all the comparisons that have the same name as the closest
+            match.
             There might be some solutions that are not ideal provided the information available, and it discards them.
 
 
@@ -199,7 +220,6 @@ class school:
                 and changes the self.first attribute to 1, indicating that this procedure took place.
         """
 
-        self.first = np.array(0).reshape(1, 1)
         if solmulti.shape[0] > 1:
             self.first = np.array(1).reshape(1, 1)
             return solmulti[0]
@@ -224,10 +244,10 @@ class school:
 
             Returns
             -------------
-            self.with_codes: a NumPy 2D-array that contains the schools that have the same information (either DANE or
+            with_codes: a NumPy 2D-array that contains the schools that have the same information (either DANE or
                              municipality) as the original school.
 
-            self.with_na: a NumPy 2D-array that contains the schools that do not have the same information as the
+            with_na: a NumPy 2D-array that contains the schools that do not have the same information as the
                           original school.
 
         """
@@ -248,19 +268,19 @@ class school:
             else:
                 condition = comparisons[:, 2] == self.dane_schoriginal
 
-            self.with_codes = comparisons[condition]
-            self.with_na = comparisons[~condition]
+            with_codes = comparisons[condition]
+            with_na = comparisons[~condition]
 
-            if len(self.with_codes) == 0 and len(self.with_na) != 0:
-                self.with_codes = self.with_na
-                return self.with_codes, self.with_na
-            elif len(self.with_na) == 0 and len(self.with_codes) != 0:
-                self.with_na = self.with_codes
-                return self.with_codes, self.with_na
-            elif len(self.with_codes) == 0 and len(self.with_na) == 0:
+            if len(with_codes) == 0 and len(with_na) != 0:
+                with_codes = with_na
+                return with_codes, with_na
+            elif len(with_na) == 0 and len(with_codes) != 0:
+                with_na = with_codes
+                return with_codes, with_na
+            elif len(with_codes) == 0 and len(with_na) == 0:
                 return comparisons, comparisons
             else:
-                return self.with_codes, self.with_na
+                return with_codes, with_na
 
         elif pd.isna(self.mun_original) and pd.isna(self.dane_schoriginal):
             self.status = "FulNaN"
@@ -274,19 +294,19 @@ class school:
             else:
                 condition = comparisons[:, 2] == self.mun_original
 
-            self.with_codes = comparisons[condition]
-            self.with_na = comparisons[~condition]
+            with_codes = comparisons[condition]
+            with_na = comparisons[~condition]
 
-            if len(self.with_codes) == 0 and len(self.with_na) != 0:
-                self.with_codes = self.with_na
-                return self.with_codes, self.with_na
-            elif len(self.with_na) == 0 and len(self.with_codes) != 0:
-                self.with_na = self.with_codes
-                return self.with_codes, self.with_na
-            elif len(self.with_codes) == 0 and len(self.with_na) == 0:
+            if len(with_codes) == 0 and len(with_na) != 0:
+                with_codes = with_na
+                return with_codes, with_na
+            elif len(with_na) == 0 and len(with_codes) != 0:
+                with_na = with_codes
+                return with_codes, with_na
+            elif len(with_codes) == 0 and len(with_na) == 0:
                 return comparisons, comparisons
             else:
-                return self.with_codes, self.with_na
+                return with_codes, with_na
 
         else:
             self.status = "Complete"
@@ -295,19 +315,19 @@ class school:
             if self.av_meet and not pd.isna(self.jornada):
                 condition = condition & (comparisons[:, 4] == self.jornada)
 
-            self.with_codes = comparisons[condition]
-            self.with_na = comparisons[~condition]
+            with_codes = comparisons[condition]
+            with_na = comparisons[~condition]
 
-            if len(self.with_codes) == 0 and len(self.with_na) != 0:
-                self.with_codes = self.with_na
-                return self.with_codes, self.with_na
-            elif len(self.with_na) == 0 and len(self.with_codes) != 0:
-                self.with_na = self.with_codes
-                return self.with_codes, self.with_na
-            elif len(self.with_codes) == 0 and len(self.with_na) == 0:
+            if len(with_codes) == 0 and len(with_na) != 0:
+                with_codes = with_na
+                return with_codes, with_na
+            elif len(with_na) == 0 and len(with_codes) != 0:
+                with_na = with_codes
+                return with_codes, with_na
+            elif len(with_codes) == 0 and len(with_na) == 0:
                 return comparisons, comparisons
             else:
-                return self.with_codes, self.with_na
+                return with_codes, with_na
 
 
 def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", partial=True, freq=10000, av_meet=False):
@@ -328,6 +348,7 @@ def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", part
     doc: It's the name for the final output.
     partial: Allows for the output of partial results. (Default True)
     freq: Defines how often the partial results are created. (Only works if partial = True)
+    av_meet: If ture, it means that the data provided includes the meeting time.
 
     Returns
     ------------
@@ -367,6 +388,7 @@ def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", part
                                        "Similarity", "First"]
 
                 results.to_excel(doc)
+                results.to_csv(doc)
 
         if partial and i % freq == 0 and i > 0:
             name = str(i)+doc
@@ -381,6 +403,7 @@ def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", part
                                     "Match School Name", "Match Municipality", "Match DANE", "Match ID",
                                     "Similarity", "First"]
             to_excel.to_excel(name)
+
     return results
 
 
