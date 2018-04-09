@@ -43,7 +43,6 @@ class school:
     """
     def __init__(self, original, av_meet=False):
         self.av_meet = av_meet
-        self.first = np.array(0).reshape(1, 1)
         if not self.av_meet:
             self.information = original.reshape(1, 4)
             self.name_original, self.mun_original, self.dane_schoriginal, self.id_original = original
@@ -108,10 +107,12 @@ class school:
         n_na = len(solution_na)
         
         if n_av == 1 and n_na != 1:
-            return np.hstack([self.information, solution_av, fit_av, self.first])
+            unique = self.multiple(self.solution_picker(solution_av)).reshape(self.size)  # Luego arreglo.
+            return np.hstack([self.information, unique, fit_av, self.first])
         
         elif n_na == 1 and n_av != 1:
-            return np.hstack([self.information, solution_na, fit_na, self.first])
+            unique = self.multiple(self.solution_picker(solution_na)).reshape(self.size)  # Luego arreglo.
+            return np.hstack([self.information, unique, fit_na, self.first])
         
         else:
            
@@ -220,6 +221,7 @@ class school:
                 and changes the self.first attribute to 1, indicating that this procedure took place.
         """
 
+        self.first = np.array(0).reshape(1, 1)
         if solmulti.shape[0] > 1:
             self.first = np.array(1).reshape(1, 1)
             return solmulti[0]
@@ -388,7 +390,7 @@ def do_match(original_db, comparison_db, deb=0, deb2=0, doc="matcher.xlsx", part
                                        "Similarity", "First"]
 
                 results.to_excel(doc)
-                results.to_csv(doc)
+                results.to_csv(doc[:-4]+"csv")
 
         if partial and i % freq == 0 and i > 0:
             name = str(i)+doc
